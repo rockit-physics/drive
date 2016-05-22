@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/odeke-em/drive/config"
-	drive "google.golang.org/api/drive/v2"
+	drive "google.golang.org/api/drive/v3"
 )
 
 type Operation int
@@ -112,26 +112,27 @@ type File struct {
 	Permissions           []*drive.Permission
 	LastModifyingUsername string
 	OriginalFilename      string
-	Labels                *drive.FileLabels
 	Description           string
 	Parents               []*ParentFile
+
+	// Labels                *drive.FileLabels
+	// The fields below used to be nested in Labels and were
+	// labels in `drive/v2`, in `drive/v3` they are flattened.
+	ViewersCanDownload bool
+	Trashed            bool
+	Viewed             bool
+	Starred            bool
+	ForceSendFields    []string
 }
 
-func newParentFile(p *drive.ParentReference) *ParentFile {
-	if p == nil {
-		return nil
-	}
-
+func newParentFile(id string) *ParentFile {
 	return &ParentFile{
-		Id:         p.Id,
-		IsRoot:     p.IsRoot,
-		SelfLink:   p.SelfLink,
-		ParentLink: p.ParentLink,
+		Id: id,
 	}
 }
 
 func NewRemoteFile(f *drive.File) *File {
-	parents := func(pl []*drive.ParentReference) (pfl []*ParentFile) {
+	parents := func(pl []string) (pfl []*ParentFile) {
 		for _, p := range pl {
 			if pf := newParentFile(p); pf != nil {
 				pfl = append(pfl, pf)
@@ -163,9 +164,14 @@ func NewRemoteFile(f *drive.File) *File {
 		Permissions:           f.Permissions,
 		LastModifyingUsername: f.LastModifyingUserName,
 		OriginalFilename:      f.OriginalFilename,
-		Labels:                f.Labels,
 		Description:           f.Description,
 		Parents:               parents,
+		// Labels:                f.Labels,
+		ViewersCanDownload: f.ViewersCanDownload,
+		Trashed:            f.Trashed,
+		Viewed:             f.Viewed,
+		Starred:            f.Starred,
+		ForceSendFields:    f.ForceSendFields,
 	}
 }
 
@@ -193,11 +199,16 @@ func DupFile(f *File) *File {
 		OwnerNames:         f.OwnerNames,
 		Permissions:        f.Permissions,
 		LastViewedByMeTime: f.LastViewedByMeTime,
-		Labels:             f.Labels,
 		AlternateLink:      f.AlternateLink,
 		OriginalFilename:   f.OriginalFilename,
 		Description:        f.Description,
 		Parents:            f.Parents,
+
+		// Labels:             f.Labels,
+		ViewersCanDownload: f.ViewersCanDownload,
+		Trashed:            f.Trashed,
+		Viewed:             f.Viewed,
+		Starred:            f.Starred,
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/odeke-em/log"
-	drive "google.golang.org/api/drive/v2"
+	drive "google.golang.org/api/drive/v3"
 )
 
 const Version = "0.3.6"
@@ -78,11 +78,12 @@ func printSummary(logy *log.Logger, about *drive.About, mask int) {
 }
 
 func fileSizesInfo(logy *log.Logger, about *drive.About) {
-	if len(about.MaxUploadSizes) >= 1 {
+	uploadSizes := about.MaxImportSizes
+	if len(uploadSizes) >= 1 {
 		logy.Logln("\n* Maximum upload sizes per file type *")
 		logy.Logf("%-50s %-20s\n", "FileType", "Size")
-		for _, uploadInfo := range about.MaxUploadSizes {
-			logy.Logf("%-50s %-20s\n", uploadInfo.Type, prettyBytes(uploadInfo.Size))
+		for typ, size := range uploadSizes {
+			logy.Logf("%-50s %-20s\n", typ, size)
 		}
 		logy.Logln()
 	}
@@ -90,40 +91,48 @@ func fileSizesInfo(logy *log.Logger, about *drive.About) {
 }
 
 func featuresInformation(logy *log.Logger, about *drive.About) {
-	if len(about.Features) >= 1 {
-		logy.Logf("%-30s %-30s\n", "Feature", "Request limit (queries/second)")
-		for _, feature := range about.Features {
-			if feature.FeatureName == "" {
-				continue
+	// Deprecated, no longer in drive/v3, was in drive/v2
+	/*
+		if len(about.Features) >= 1 {
+			logy.Logf("%-30s %-30s\n", "Feature", "Request limit (queries/second)")
+			for _, feature := range about.Features {
+				if feature.FeatureName == "" {
+					continue
+				}
+				logy.Logf("%-30s %-30f\n", feature.FeatureName, feature.FeatureRate)
 			}
-			logy.Logf("%-30s %-30f\n", feature.FeatureName, feature.FeatureRate)
+			logy.Logln()
 		}
-		logy.Logln()
-	}
+	*/
 }
 
 func quotaInformation(logy *log.Logger, about *drive.About) {
-	freeBytes := about.QuotaBytesTotal - about.QuotaBytesUsed
+	storageQuota := about.StorageQuota
+	userInfo := about.User
 
+	freeBytes := storageQuota.Usage - storageQuota.UsageInDrive
 	logy.Logf(
-		"Name: %s\nAccount type:\t%s\nBytes Used:\t%-20d (%s)\n"+
+		"Name: %s\nBytes Used:\t%-20d (%s)\n"+
 			"Bytes Free:\t%-20d (%s)\nBytes InTrash:\t%-20d (%s)\n"+
 			"Total Bytes:\t%-20d (%s)\n",
-		about.Name, about.QuotaType,
-		about.QuotaBytesUsed, prettyBytes(about.QuotaBytesUsed),
+		userInfo.DisplayName,
+		storageQuota.UsageInDrive, prettyBytes(storageQuota.UsageInDrive),
 		freeBytes, prettyBytes(freeBytes),
-		about.QuotaBytesUsedInTrash, prettyBytes(about.QuotaBytesUsedInTrash),
-		about.QuotaBytesTotal, prettyBytes(about.QuotaBytesTotal))
+		storageQuota.UsageInDriveTrash, prettyBytes(storageQuota.UsageInDriveTrash),
+		storageQuota.Usage, prettyBytes(storageQuota.Usage))
 
-	if len(about.QuotaBytesByService) >= 1 {
-		logy.Logln("\n* Space used by Google Services *")
-		logy.Logf("%-36s %-36s\n", "Service", "Bytes")
-		for _, quotaService := range about.QuotaBytesByService {
-			logy.Logf("%-36s %-36s\n", quotaService.ServiceName, prettyBytes(quotaService.BytesUsed))
+	/*
+		// Deprecated in v3
+		if len(storageQuota.QuotaBytesByService) >= 1 {
+			logy.Logln("\n* Space used by Google Services *")
+			logy.Logf("%-36s %-36s\n", "Service", "Bytes")
+			for _, quotaService := range about.QuotaBytesByService {
+				logy.Logf("%-36s %-36s\n", quotaService.ServiceName, prettyBytes(quotaService.BytesUsed))
+			}
+			logy.Logf("%-36s %-36s\n", "Space used by all Google Apps",
+				prettyBytes(storageQuota.Usage))
 		}
-		logy.Logf("%-36s %-36s\n", "Space used by all Google Apps",
-			prettyBytes(about.QuotaBytesUsedAggregate))
-	}
+	*/
 	logy.Logln()
 }
 
@@ -137,17 +146,18 @@ func (g *Commands) QuotaStatus(query int64) (status int, err error) {
 		return Unknown, err
 	}
 
+	quota := about.StorageQuota
 	// Sanity check
-	if about.QuotaBytesTotal < 1 {
+	if quota.Usage < 1 {
 		return Unknown, fmt.Errorf("QuotaBytesTotal < 1")
 	}
 
-	toBeUsed := query + about.QuotaBytesUsed
-	if toBeUsed >= about.QuotaBytesTotal {
+	toBeUsed := query + quota.UsageInDrive
+	if toBeUsed >= quota.Usage {
 		return Exceeded, nil
 	}
 
-	percentage := float64(toBeUsed) / float64(about.QuotaBytesTotal)
+	percentage := float64(toBeUsed) / float64(quota.Usage)
 	if percentage < 0.5 {
 		return Barely, nil
 	}

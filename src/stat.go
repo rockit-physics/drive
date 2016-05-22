@@ -17,7 +17,7 @@ package drive
 import (
 	"fmt"
 	"github.com/odeke-em/log"
-	drive "google.golang.org/api/drive/v2"
+	drive "google.golang.org/api/drive/v3"
 	"path/filepath"
 	"strings"
 )
@@ -116,14 +116,12 @@ func prettyFileStat(logf log.Loggerf, relToRootPath string, file *File) {
 		kvList = append(kvList, &keyValue{"Copyable", fmt.Sprintf("%v", file.Copyable)})
 	}
 
-	if file.Labels != nil {
-		kvList = append(kvList,
-			&keyValue{"Starred", fmt.Sprintf("%v", file.Labels.Starred)},
-			&keyValue{"Viewed", fmt.Sprintf("%v", file.Labels.Viewed)},
-			&keyValue{"Trashed", fmt.Sprintf("%v", file.Labels.Trashed)},
-			&keyValue{"ViewersCanDownload", fmt.Sprintf("%v", file.Labels.Restricted)},
-		)
-	}
+	kvList = append(kvList,
+			&keyValue{"Starred", fmt.Sprintf("%v", file.Starred)},
+			&keyValue{"Viewed", fmt.Sprintf("%v", file.Viewed)},
+			&keyValue{"Trashed", fmt.Sprintf("%v", file.Trashed)},
+			&keyValue{"ViewersCanDownload", fmt.Sprintf("%v", file.Restricted)},
+	)
 
 	for _, kv := range kvList {
 		logf("%-25s %-30v\n", kv.key, kv.value.(string))

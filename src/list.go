@@ -384,7 +384,7 @@ func (g *Commands) breadthFirst(travSt traversalSt, spin *playable) bool {
 
 	req := g.rem.service.Files.List()
 	req.Q(expr)
-	req.MaxResults(g.opts.PageSize)
+	req.PageSize(g.opts.PageSize)
 
 	spin.pause()
 

@@ -32,7 +32,7 @@ import (
 	"github.com/odeke-em/statos"
 
 	expb "github.com/odeke-em/exponential-backoff"
-	drive "google.golang.org/api/drive/v2"
+	drive "google.golang.org/api/drive/v3"
 )
 
 const (
@@ -106,37 +106,6 @@ func hasExportLinks(f *File) bool {
 	return len(f.ExportLinks) >= 1
 }
 
-func (r *Remote) changes(startChangeId int64) (chan *drive.Change, error) {
-	req := r.service.Changes.List()
-	if startChangeId >= 0 {
-		req = req.StartChangeId(startChangeId)
-	}
-
-	changeChan := make(chan *drive.Change)
-	go func() {
-		pageToken := ""
-		for {
-			if pageToken != "" {
-				req = req.PageToken(pageToken)
-			}
-			res, err := req.Do()
-			if err != nil {
-				break
-			}
-			for _, chItem := range res.Items {
-				changeChan <- chItem
-			}
-			pageToken = res.NextPageToken
-			if pageToken == "" {
-				break
-			}
-		}
-		close(changeChan)
-	}()
-
-	return changeChan, nil
-}
-
 func buildExpression(parentId string, typeMask int, inTrash bool) string {
 	var exprBuilder []string
 
@@ -151,10 +120,6 @@ func buildExpression(parentId string, typeMask int, inTrash bool) string {
 		exprBuilder = append(exprBuilder, fmt.Sprintf("mimeType = '%s'", DriveFolderMimeType))
 	}
 	return strings.Join(exprBuilder, " and ")
-}
-
-func (r *Remote) change(changeId string) (*drive.Change, error) {
-	return r.service.Changes.Get(changeId).Do()
 }
 
 func RetrieveRefreshToken(ctx context.Context, context *config.Context) (string, error) {
@@ -317,8 +282,8 @@ func _reqDoPage(req *drive.FilesListCall, hidden bool, promptOnPagination, nilOn
 			}
 
 			iterCount := uint64(0)
-			for _, f := range results.Items {
-				if isHidden(f.Title, hidden) { // ignore hidden files
+			for _, f := range results.Files {
+				if isHidden(f.Name, hidden) { // ignore hidden files
 					continue
 				}
 				iterCount += 1
@@ -326,7 +291,7 @@ func _reqDoPage(req *drive.FilesListCall, hidden bool, promptOnPagination, nilOn
 			}
 			pageToken = results.NextPageToken
 			if pageToken == "" {
-				if nilOnNoMatch && len(results.Items) < 1 && pageIterCount < 1 {
+				if nilOnNoMatch && len(results.Files) < 1 && pageIterCount < 1 {
 					// Item absolutely doesn't exist
 					fileChan <- nil
 				}
@@ -366,26 +331,22 @@ func (r *Remote) EmptyTrash() error {
 	return r.service.Files.EmptyTrash().Do()
 }
 
-func (r *Remote) Trash(id string) error {
-	_, err := r.service.Files.Trash(id).Do()
+func (r *Remote) doTrashing(fileId string, trashIt bool) error {
+	req := r.service.Files.Update(fileId, &drive.File{Trashed: trashIt, ForceSendFields: []string{"trashed"}})
+	_, err := req.Do()
 	return err
 }
 
+func (r *Remote) Trash(id string) error {
+	return r.doTrashing(id, true)
+}
+
 func (r *Remote) Untrash(id string) error {
-	_, err := r.service.Files.Untrash(id).Do()
-	return err
+	return r.doTrashing(id, false)
 }
 
 func (r *Remote) Delete(id string) error {
 	return r.service.Files.Delete(id).Do()
-}
-
-func (r *Remote) idForEmail(email string) (string, error) {
-	perm, err := r.service.Permissions.GetIdForEmail(email).Do()
-	if err != nil {
-		return "", err
-	}
-	return perm.Id, nil
 }
 
 func (r *Remote) listPermissions(id string) ([]*drive.Permission, error) {
@@ -393,7 +354,7 @@ func (r *Remote) listPermissions(id string) ([]*drive.Permission, error) {
 	if err != nil {
 		return nil, err
 	}
-	return res.Items, nil
+	return res.Permissions, nil
 }
 
 func (r *Remote) insertPermissions(permInfo *permission) (*drive.Permission, error) {
@@ -402,8 +363,12 @@ func (r *Remote) insertPermissions(permInfo *permission) (*drive.Permission, err
 		Type: permInfo.accountType.String(),
 	}
 
-	if permInfo.value != "" {
-		perm.Value = permInfo.value
+	if value := permInfo.value; value != "" {
+		if urlLike(value) {
+			perm.Value = permInfo.value
+		} else {
+			perm.Value = permInfo.value
+		}
 	}
 
 	req := r.service.Permissions.Insert(permInfo.fileId, perm)
@@ -621,7 +586,7 @@ type upsertOpt struct {
 	retryCount     int
 }
 
-func togglePropertiesInsertCall(req *drive.FilesInsertCall, mask int) *drive.FilesInsertCall {
+func togglePropertiesInsertCall(req *drive.FilesCreateCall, mask int) *drive.FilesCreateCall {
 	// TODO: if ocr toggled respect the quota limits if ocr is enabled.
 	if ocr(mask) {
 		req = req.Ocr(true)
@@ -750,12 +715,10 @@ func (r *Remote) updateDescription(fileId, newDescription string) (*File, error)
 
 func (r *Remote) updateStarred(fileId string, star bool) (*File, error) {
 	f := &drive.File{
-		Labels: &drive.FileLabels{
-			Starred: star,
-			// Since "Starred" is a non-pointer value, we'll need to
-			// unconditionally send it with API-requests using "ForceSendFields"
-			ForceSendFields: []string{"Starred"},
-		},
+		Starred: star,
+		// Since "Starred" is a non-pointer value, we'll need to
+		// unconditionally send it with API-requests using "ForceSendFields"
+		ForceSendFields: []string{"Starred"},
 	}
 
 	return r.byFileIdUpdater(fileId, f)

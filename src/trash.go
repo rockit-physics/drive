@@ -109,10 +109,8 @@ func (g *Commands) trasher(relToRoot string, opt *trashOpt) (*Change, error) {
 	}
 
 	if opt.byId {
-		if file.Labels != nil {
-			if file.Labels.Trashed == opt.toTrash {
-				return nil, illogicalStateErr(fmt.Errorf("toTrash=%v set yet already file.Trash=%v", opt.toTrash, file.Labels.Trashed))
-			}
+		if file.Trashed == opt.toTrash {
+			return nil, illogicalStateErr(fmt.Errorf("toTrash=%v set yet already file.Trash=%v", opt.toTrash, file.Trashed))
 		}
 		relToRoot = fmt.Sprintf("%s (%s)", relToRoot, file.Name)
 	}
