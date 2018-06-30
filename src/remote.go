@@ -1197,6 +1197,73 @@ func (r *Remote) findByPathTrashed(parentId string, p []string) (*File, error) {
 	return r.findByPathRecvRaw(parentId, p, true)
 }
 
+func (r *Remote) statTeamDrive(id string) (*drive.TeamDrive, error) {
+	return r.service.Teamdrives.Get(id).Do()
+}
+
+// deleteTeamDrive deletes the Team Drive for which the user is the organizer.
+// The Team Drive cannot contain any untrashed items, the directory's items
+// should have already been trashed.
+func (r *Remote) deleteTeamDrive(id string) error {
+	return r.service.Teamdrives.Delete(id).Do()
+}
+
+func reqPageTeamDrives(req *drive.TeamdrivesListCall, hidden, promptOnPagination bool) *paginationPair {
+	teamDrivesChan := make(chan *File)
+	errsChan := make(chan error)
+	throttle := time.Tick(1e8)
+
+	go func() {
+		defer func() {
+			close(errsChan)
+			close(teamDrivesChan)
+		}()
+
+		pageToken := ""
+		for pageIterCount := uint64(0); ; pageIterCount++ {
+			if pageToken != "" {
+				req = req.PageToken(pageToken)
+			}
+			results, err := req.Do()
+			if err != nil {
+				errsChan <- err
+				break
+			}
+
+			iterCount := uint64(0)
+			for _, td := range results.Items {
+				if isHidden(td.Name, hidden) { // ignore hidden TeamDrives
+					continue
+				}
+				iterCount += 1
+				teamDrivesChan <- teamDriveToFile(td)
+			}
+
+			pageToken = results.NextPageToken
+			if pageToken == "" {
+				if nilOnNoMatch && len(results.Items) < 1 && pageIterCount < 1 {
+					// Item absolutely doesn't exist
+					teamDrivesChan <- nil
+				}
+				break
+			}
+
+			<-throttle
+
+			if iterCount < 1 {
+				continue
+			}
+
+			if promptOnPagination && !nextPage() {
+				teamDrivesChan <- nil
+				break
+			}
+		}
+	}()
+
+	return &paginationPair{filesChan: teamDrivesChan, errsChan: errsChan}
+}
+
 func newAuthConfig(context *config.Context) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     context.ClientId,

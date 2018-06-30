@@ -79,6 +79,32 @@ func prettyPermission(logf log.Loggerf, perm *drive.Permission) {
 	logf("*\n")
 }
 
+func prettyTeamDriveCapabilities(logf log.Loggerf, relToRootPath string, file *File) {
+	if file == nil || file.TeamDriveCapabilities == nil {
+		return
+	}
+	logf("\n\033[93m%s\033[00m\n", relToRootPath)
+	c := file.TeamDriveCapabilities
+	kvList := []*keyValue{
+		{"CanAddChildren", fmt.Sprintf("%v", c.CanAddChildren)},
+		{"CanChangeTeamBackground", fmt.Sprintf("%v", c.CanChangeTeamBackground)},
+		{"CanComment", fmt.Sprintf("%v", c.CanComment)},
+		{"CanCopy", fmt.Sprintf("%v", c.CanCopy)},
+		{"CanDeleteTeamDrive", fmt.Sprintf("%v", c.CanDeleteTeamDrive)},
+		{"CanEdit", fmt.Sprintf("%v", c.CanEdit)},
+		{"CanListChildren", fmt.Sprintf("%v", c.CanListChildren)},
+		{"CanManageTeamMembers", fmt.Sprintf("%v", c.CanManageTeamMembers)},
+		{"CanReadRevisions", fmt.Sprintf("%v", c.CanReadRevisions)},
+		{"CanRemoveChildren", fmt.Sprintf("%v", c.CanRemoveChildren)},
+		{"CanRename", fmt.Sprintf("%v", c.CanRename)},
+		{"CanShare", fmt.Sprintf("%v", c.CanShare)},
+	}
+
+	for _, kv := range kvList {
+		logf("%-25s %-30v\n", kv.key, kv.value.(string))
+	}
+}
+
 func prettyFileStat(logf log.Loggerf, relToRootPath string, file *File) {
 	dirType := "file"
 	if file.IsDir {
@@ -139,6 +165,7 @@ func (g *Commands) stat(relToRootPath string, file *File, depth int) error {
 			g.log.Logf("%32s  %s\n", file.Md5Checksum, strings.TrimPrefix(relToRootPath, "/"))
 		}
 	} else {
+		prettyTeamDriveCapabilities(g.log.Logf, relToRootPath, file)
 		prettyFileStat(g.log.Logf, relToRootPath, file)
 		perms, permErr := g.rem.listPermissions(file.Id)
 		if permErr != nil {

@@ -50,7 +50,7 @@ func sorters(opts *Options) []string {
 		return nil
 	}
 
-	// Keys sent it via meta need to be comma split
+	// Keys sent in via meta need to be comma split
 	// first, space trimmed then added.
 	// See Issue https://github.com/odeke-em/drive/issues/714.
 	var sortKeys []string
@@ -380,8 +380,35 @@ func (f *File) pretty(logy *log.Logger, opt attribute) {
 	}
 }
 
-func (g *Commands) breadthFirst(travSt traversalSt, spin *playable) bool {
+func (g *Commands) paginator(f *File, travSt traversalSt) func() *paginationPair {
+	expr := buildExpression(f.Id, travSt.mask, travSt.inTrash)
 
+	if mq := travSt.matchQuery; mq != nil {
+		exprExtra := mq.Stringer()
+		expr = sepJoinNonEmpty(" and ", fmt.Sprintf("(%s)", expr), exprExtra)
+	}
+
+	var paginator func() *paginationPair
+	if teamDrives(g.opts.TypeMask) {
+		req := g.rem.service.Teamdrives.List()
+		req.Q(expr)
+		req.MaxResults(g.opts.PageSize)
+		paginator = func() *paginationPair {
+			return reqPageTeamDrives(req, g.opts.Hidden, false)
+		}
+	} else {
+		req := g.rem.service.Files.List()
+		req.Q(expr)
+		req.MaxResults(g.opts.PageSize)
+		paginator = func() *paginationPair {
+			return reqDoPage(req, g.opts.Hidden, false)
+		}
+	}
+
+	return paginator
+}
+
+func (g *Commands) breadthFirst(travSt traversalSt, spin *playable) bool {
 	opt := attribute{
 		minimal:       isMinimal(g.opts.TypeMask),
 		diskUsageOnly: diskUsageOnly(g.opts.TypeMask),
@@ -412,17 +439,6 @@ func (g *Commands) breadthFirst(travSt traversalSt, spin *playable) bool {
 		travSt.depth -= 1
 	}
 
-	expr := buildExpression(f.Id, travSt.mask, travSt.inTrash)
-
-	if travSt.matchQuery != nil {
-		exprExtra := travSt.matchQuery.Stringer()
-		expr = sepJoinNonEmpty(" and ", fmt.Sprintf("(%s)", expr), exprExtra)
-	}
-
-	req := g.rem.service.Files.List()
-	req.Q(expr)
-	req.MaxResults(g.opts.PageSize)
-
 	spin.pause()
 
 	canPrompt := !travSt.explicitNoPrompt
@@ -441,7 +457,7 @@ func (g *Commands) breadthFirst(travSt traversalSt, spin *playable) bool {
 	// We shouldn't prompt in between the same page otherwise we get
 	// spurious prompts. See Issue https://github.com/odeke-em/drive/issues/724.
 	// We'll only make the prompts in between children.
-	pagePair := reqDoPage(req, g.opts.Hidden, false)
+	pagePair := g.paginator(f, travSt)
 	errsChan := pagePair.errsChan
 	filesChan := pagePair.filesChan
 
@@ -548,4 +564,8 @@ func trashed(mask int) bool {
 
 func starred(mask int) bool {
 	return (mask & Starred) != 0
+}
+
+func teamDrives(mask int) bool {
+	return (mask & TeamDrives) != 0
 }

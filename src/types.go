@@ -116,6 +116,10 @@ type File struct {
 	Description           string
 	Parents               []*ParentFile
 	QuotaBytesUsed        int64
+
+	// TeamDriveCapabilities denotes the capabilities that
+	// a user has within the Team Drive.
+	TeamDriveCapabilities *drive.TeamDriveCapabilities
 }
 
 func newParentFile(p *drive.ParentReference) *ParentFile {

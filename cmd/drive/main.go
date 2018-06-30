@@ -320,6 +320,7 @@ func (cmd *urlCmd) Run(args []string, definedArgs map[string]*flag.Flag) {
 }
 
 type listCmd struct {
+	TeamDrives   *bool   `json:"team_drives"`
 	ById         *bool   `json:"by-id"`
 	Hidden       *bool   `json:"hidden"`
 	Recursive    *bool   `json:"recursive"`
@@ -429,18 +430,19 @@ func (lCmd *listCmd) _run(args []string, definedFlags map[string]*flag.Flag, dis
 	}
 
 	opts := &drive.Options{
-		Path:      path,
-		Sources:   sources,
-		Depth:     depth,
-		Hidden:    *cmd.Hidden,
-		InTrash:   *cmd.InTrash,
-		PageSize:  *cmd.PageSize,
-		NoPrompt:  *cmd.NoPrompt,
-		Recursive: *cmd.Recursive,
-		TypeMask:  typeMask,
-		Quiet:     *cmd.Quiet,
-		Meta:      &meta,
-		Match:     *cmd.Matches,
+		Path:       path,
+		Sources:    sources,
+		Depth:      depth,
+		Hidden:     *cmd.Hidden,
+		InTrash:    *cmd.InTrash,
+		PageSize:   *cmd.PageSize,
+		NoPrompt:   *cmd.NoPrompt,
+		Recursive:  *cmd.Recursive,
+		TypeMask:   typeMask,
+		Quiet:      *cmd.Quiet,
+		Meta:       &meta,
+		Match:      *cmd.Matches,
+		TeamDrives: *cmd.TeamDrives,
 	}
 
 	if *cmd.Shared {
